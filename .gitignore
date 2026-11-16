@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+build/
+dist/
+release/
+*.spec
+.local/
+*.xlsx
+*.pdf
+*.zip
+*.log
+.env
+*.token
+screenshots/
+tools/bootstrap_engine.py
+assets/*.ico
