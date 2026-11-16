@@ -128,6 +128,39 @@ def launch_update(archive,expected_sha256,directory):
     subprocess.Popen(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],
                      creationflags=subprocess.CREATE_NO_WINDOW)
 
+def _create_shortcut(link,target):
+    """Use Unicode ShellLink APIs regardless of Windows' system code page."""
+    import ctypes
+    import uuid
+    from ctypes import wintypes
+    guid=lambda value:(ctypes.c_byte*16).from_buffer_copy(uuid.UUID(value).bytes_le)
+    ole=ctypes.OleDLL('ole32')
+    ole.CoInitializeEx.argtypes=[ctypes.c_void_p,wintypes.DWORD]
+    ole.CoCreateInstance.argtypes=[ctypes.c_void_p,ctypes.c_void_p,wintypes.DWORD,ctypes.c_void_p,ctypes.POINTER(ctypes.c_void_p)]
+    result=ole.CoInitializeEx(None,2)
+    if result not in (0,1):raise OSError('Windows 바로가기 초기화 실패')
+    shell=ctypes.c_void_p();persist=ctypes.c_void_p()
+    def call(obj,index,types,*args):
+        table=ctypes.cast(obj,ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        method=ctypes.WINFUNCTYPE(ctypes.c_long,ctypes.c_void_p,*types)(table[index])
+        code=method(obj,*args)
+        if code<0:raise OSError(f'Windows 바로가기 생성 실패: {code:#x}')
+    try:
+        clsid=guid('00021401-0000-0000-c000-000000000046')
+        iid=guid('000214f9-0000-0000-c000-000000000046')
+        ole.CoCreateInstance(ctypes.byref(clsid),None,1,ctypes.byref(iid),ctypes.byref(shell))
+        call(shell,20,[wintypes.LPCWSTR],str(target))
+        call(shell,9,[wintypes.LPCWSTR],str(Path(target).parent))
+        call(shell,7,[wintypes.LPCWSTR],'두 사람 근무표')
+        iid_file=guid('0000010b-0000-0000-c000-000000000046')
+        call(shell,0,[ctypes.c_void_p,ctypes.POINTER(ctypes.c_void_p)],ctypes.byref(iid_file),ctypes.byref(persist))
+        call(persist,6,[wintypes.LPCWSTR,wintypes.BOOL],str(link),True)
+    finally:
+        for obj in (persist,shell):
+            if obj:call(obj,2,[])
+        ole.CoUninitialize()
+
+
 def install_application():
     if not getattr(sys,'frozen',False):raise ValueError('배포용 실행 파일에서 설치를 실행하세요.')
     import shutil
@@ -142,10 +175,5 @@ def install_application():
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as key:
         desktop=Path(os.path.expandvars(winreg.QueryValueEx(key,'Desktop')[0]))
     link=desktop/'두 사람 근무표.lnk'
-    script=f"$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut({_ps_quote(link)}); $s.TargetPath={_ps_quote(destination/'DuoRoster.exe')}; $s.WorkingDirectory={_ps_quote(destination)}; $s.Description='두 사람 근무표'; $s.Save()"
-    encoded=base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
-    if result.returncode:
-        details=(result.stderr or result.stdout).decode('utf-8',errors='replace')
-        raise RuntimeError('바탕화면 바로가기 생성 실패: '+details)
+    _create_shortcut(link,destination/'DuoRoster.exe')
     return destination
