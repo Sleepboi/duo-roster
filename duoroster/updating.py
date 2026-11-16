@@ -144,5 +144,8 @@ def install_application():
     link=desktop/'두 사람 근무표.lnk'
     script=f"$w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut({_ps_quote(link)}); $s.TargetPath={_ps_quote(destination/'DuoRoster.exe')}; $s.WorkingDirectory={_ps_quote(destination)}; $s.Description='두 사람 근무표'; $s.Save()"
     encoded=base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
+    result=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
+    if result.returncode:
+        details=(result.stderr or result.stdout).decode('utf-8',errors='replace')
+        raise RuntimeError('바탕화면 바로가기 생성 실패: '+details)
     return destination
