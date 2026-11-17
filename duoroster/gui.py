@@ -125,8 +125,8 @@ class App(tk.Tk):
         self.report_label=tk.Label(bottom,bg=BG,fg=INK,justify='left',anchor='w',font=('맑은 고딕',10))
         self.report_label.pack(side='left',fill='x',expand=True)
         ttk.Button(bottom,text='검사 상세',command=self.details).pack(side='right')
-        for code,title in [('D','데이'),('E','이브닝'),('MD','단독 근무'),('OFF','휴무')]:
-            tk.Label(bottom,text=f'{code} {title}',bg=COLORS[code],fg=INK,padx=6,pady=4,font=('맑은 고딕',9)).pack(side='right',padx=2)
+        for code in ('D','E','MD','OFF'):
+            tk.Label(bottom,text=code,bg=COLORS[code],fg=INK,padx=12,pady=4,font=('맑은 고딕',10,'bold')).pack(side='right',padx=2)
 
     def scroll_panel(self,event):
         for panel in (self.side_canvas,self.calendar_canvas):
@@ -181,7 +181,7 @@ class App(tk.Tk):
                 tile=tk.Frame(tiles,bg=COLORS[code],padx=6,pady=4)
                 tile.grid(row=i//2,column=i%2,sticky='nsew',padx=2,pady=2)
                 tiles.columnconfigure(i%2,weight=1,uniform='totals')
-                tk.Label(tile,text=f'{SHIFT_NAMES[code]} {code}',bg=COLORS[code],fg=INK,font=('맑은 고딕',10,'bold')).pack(anchor='w')
+                tk.Label(tile,text=code,bg=COLORS[code],fg=INK,font=('맑은 고딕',12,'bold')).pack(anchor='w')
                 tk.Label(tile,text=f'{c[code] if c else 0}일',bg=COLORS[code],fg=INK,font=('맑은 고딕',22,'bold')).pack(anchor='w')
             off_count=c['OFF'] if c else 0
             tk.Label(self.summary_frame,text=f'휴무 목표 {m["off_goal"]}일 · 현재 {off_count}일',bg='white',fg='#A44747' if off_count!=m['off_goal'] else '#35644F',font=('맑은 고딕',10,'bold')).pack(anchor='w',pady=(3,0))
@@ -210,21 +210,23 @@ class App(tk.Tk):
             for p,name in enumerate(self.state['settings']['names']):
                 code=pair[p] if pair else '-'
                 color=COLORS.get(code,'#F2F4F8')
-                card=tk.Frame(day,bg=color,highlightthickness=2 if rec['fixed'][p] else 0,highlightbackground=NAVY)
+                card=tk.Frame(day,bg=color,highlightthickness=2,highlightbackground=NAVY if rec['fixed'][p] else color)
                 card.grid(row=1+p,column=0,sticky='nsew',pady=2)
-                head=tk.Frame(card,bg=color);head.pack(fill='x',padx=4,pady=(2,0))
-                tk.Label(head,text=name,bg=color,fg=INK,font=('맑은 고딕',10,'bold')).pack(side='left')
-                if rec['fixed'][p]:tk.Label(head,text='고정',bg=NAVY,fg='white',padx=3,font=('맑은 고딕',9,'bold')).pack(side='right')
-                button=tk.Button(card,text=f'{SHIFT_NAMES.get(code,"미입력")} {code}',bg=color,fg='#1C2D3B',activebackground=color,
-                    font=('맑은 고딕',14,'bold'),relief='flat',borderwidth=0,pady=0,command=lambda v=rec,who=p:self.shift_dialog(v,who))
-                button.pack(fill='both',expand=True)
+                head=tk.Frame(card,bg=color,height=24);head.pack(fill='x',padx=3,pady=(2,0));head.pack_propagate(False)
+                name_label=tk.Label(head,text=name,bg=color,fg=INK,font=('맑은 고딕',10,'bold'));name_label.pack(side='left')
+                edit_targets=[card,head,name_label]
+                if rec['fixed'][p]:
+                    fixed_label=tk.Label(head,text='고정',bg=NAVY,fg='white',padx=3,font=('맑은 고딕',9,'bold'));fixed_label.pack(side='right')
+                    edit_targets.append(fixed_label)
                 if (rec['date'],name) in exceptions:
-                    tk.Button(card,text='복귀 예외 · 확인',command=lambda who=name:self.return_exceptions(who),bg='#FFF1CC',fg='#6F4800',relief='flat',pady=0,font=('맑은 고딕',10,'bold')).pack(fill='x')
-                for widget in (card,head,*head.winfo_children()):
+                    tk.Button(head,text='예외',command=lambda who=name:self.return_exceptions(who),bg='#FFF1CC',fg='#6F4800',relief='flat',borderwidth=0,padx=3,pady=0,font=('맑은 고딕',9,'bold')).pack(side='right',padx=2)
+                if rec['wish'][p]:tk.Label(head,text='희망',bg='#F0F3F8',fg=NAVY,padx=3,font=('맑은 고딕',9,'bold')).pack(side='right')
+                button=tk.Button(card,text=code,bg=color,fg='#1C2D3B',activebackground=color,
+                    font=('맑은 고딕',18,'bold'),relief='flat',borderwidth=0,pady=0,command=lambda v=rec,who=p:self.shift_dialog(v,who))
+                button.pack(fill='both',expand=True)
+                for widget in edit_targets:
                     widget.bind('<Button-1>',lambda event,v=rec,who=p:self.shift_dialog(v,who))
-                day.rowconfigure(1+p,weight=1)
-            if any(rec['wish']):
-                tk.Label(day,text='희망 휴무',bg='#F0F3F8',fg=NAVY,font=('맑은 고딕',10,'bold')).grid(row=3,column=0,sticky='ew')
+                day.rowconfigure(1+p,weight=1,uniform='person',minsize=76)
         report=self.latest_report
         self.cal.update_idletasks()
         self.calendar_min_height=max(self.calendar_min_height,self.cal.winfo_reqheight())
@@ -238,7 +240,7 @@ class App(tk.Tk):
 
     def return_exceptions(self,name):
         entries=[e for e in self.latest_report['exceptions'] if e['name']==name]
-        lines=[f'{e["date"]}  휴무 → {SHIFT_NAMES[e["shift"]]} ({e["shift"]})' for e in entries]
+        lines=[f'{e["date"]}  OFF → {e["shift"]}' for e in entries]
         win=self.dialog('복귀 선호 예외',650,440)
         tk.Label(win,text=f'{name} · 복귀 선호 예외 {len(entries)}건',font=('맑은 고딕',16,'bold'),fg=INK).pack(anchor='w',padx=20,pady=(18,10))
         tk.Label(win,text='허용되는 예외 · 필수 규칙 위반 아님',bg='#FFF1CC',fg='#6F4800',font=('맑은 고딕',12,'bold'),padx=12,pady=9).pack(fill='x',padx=20)
